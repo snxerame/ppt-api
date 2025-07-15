@@ -1,3 +1,5 @@
 python-pptx==1.0.2
 requests==2.32.4
 Pillow==10.3.0
+chromadb==0.3.26
+pydantic==1.10.9
