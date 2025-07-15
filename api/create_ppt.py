@@ -8,7 +8,7 @@ from pptx.enum.text import PP_ALIGN, MSO_VERTICAL_ANCHOR
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 
-LOGO_PATH = "sp_global_logo.png"  # Make sure this is deployed with your app or remove as needed
+LOGO_PATH = "sp_global_logo.png"  # Ensure this is in your project root, or leave as is to skip logo
 
 def set_a4_landscape(prs):
     prs.slide_width = Cm(29.7)
@@ -18,10 +18,13 @@ def add_footer_with_logo(prs, slide, page_num):
     logo_width = Cm(6.0)
     logo_height = Cm(2.4)
     footer_y = Cm(18.03)
-    if os.path.exists(LOGO_PATH):
-        slide.shapes.add_picture(LOGO_PATH, Cm(1), footer_y, width=logo_width, height=logo_height)
-        left_text_x = Cm(7.2)
-    else:
+    try:
+        if os.path.exists(LOGO_PATH):
+            slide.shapes.add_picture(LOGO_PATH, Cm(1), footer_y, width=logo_width, height=logo_height)
+            left_text_x = Cm(7.2)
+        else:
+            left_text_x = Cm(1)
+    except Exception:
         left_text_x = Cm(1)
     left_box = slide.shapes.add_textbox(left_text_x, footer_y, Cm(10), Cm(1.5))
     left_frame = left_box.text_frame
@@ -224,8 +227,6 @@ def ppt_api_main(event_body):
     ppt_mem = io.BytesIO()
     prs.save(ppt_mem)
     ppt_mem.seek(0)
-
-    # --- Upload to Vercel Blob ---
     VERCEL_BLOB_WRITE_URL = "https://api.vercel.com/v8/blob/upload"
     BLOB_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN")
     filename = f"{heading.replace(' ', '_')}.pptx" if heading else "presentation.pptx"
