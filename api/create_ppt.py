@@ -8,9 +8,7 @@ from pptx.enum.text import PP_ALIGN, MSO_VERTICAL_ANCHOR
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 
-# ---- BEGIN: YOUR HELPER FUNCTIONS (unchanged from your script) ----
-
-LOGO_PATH = "sp_global_logo.png"
+LOGO_PATH = "sp_global_logo.png"  # Place in project root or adjust path
 
 def set_a4_landscape(prs):
     prs.slide_width = Cm(29.7)
@@ -29,7 +27,8 @@ def add_footer_with_logo(prs, slide, page_num):
     left_frame = left_box.text_frame
     left_frame.clear()
     p_left = left_frame.add_paragraph()
-    p_left.text = "Permission to reprint or distribute any content from this presentation requires the prior written approval of S&P Global Market Intelligence. "
+    p_left.text = ("Permission to reprint or distribute any content from this presentation requires "
+                   "the prior written approval of S&P Global Market Intelligence.")
     p_left.font.size = Pt(10)
     p_left.font.color.rgb = RGBColor(128, 128, 128)
     p_left.alignment = PP_ALIGN.LEFT
@@ -110,6 +109,7 @@ def create_front_page(prs, heading, date_to_present):
 def create_content_slide(prs, idx, venue_info, page_num):
     slide_layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(slide_layout)
+
     venue_name = venue_info.get("venue_name", "")
     venue_city = venue_info.get("venue_city", "")
     venue_guest_rooms = venue_info.get("venue_guest_rooms", "")
@@ -117,6 +117,7 @@ def create_content_slide(prs, idx, venue_info, page_num):
     average_daily_rate = venue_info.get("average_daily_rate", "")
     total_fandb = venue_info.get("total_FandB", "")
     additional_fees = venue_info.get("additional_fees", "")
+
     heading_val = f"Recommendation #{idx+1} – {venue_name} : {venue_guest_rooms} rooms"
     heading_box = slide.shapes.add_textbox(Cm(1), Cm(1), Cm(21), Cm(2))
     heading_frame = heading_box.text_frame
@@ -194,8 +195,6 @@ def create_content_slide(prs, idx, venue_info, page_num):
         p_label.alignment = PP_ALIGN.CENTER
     add_footer_with_logo(prs, slide, page_num)
 
-# ---- END: YOUR HELPER FUNCTIONS ----
-
 def parse_input(text):
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     heading = lines[0]
@@ -213,10 +212,8 @@ def parse_input(text):
                         recs[idx][param] = value
     return heading, date_to_present, num, recs
 
-
-def main(event_body):
+def ppt_api_main(event_body):
     heading, date_to_present, num, recs = parse_input(event_body)
-
     prs = Presentation()
     set_a4_landscape(prs)
     create_front_page(prs, heading, date_to_present)
@@ -224,28 +221,26 @@ def main(event_body):
     for idx, rec in enumerate(recs):
         create_content_slide(prs, idx, rec, slide_num)
         slide_num += 1
-
     ppt_mem = io.BytesIO()
     prs.save(ppt_mem)
     ppt_mem.seek(0)
 
-    # Upload to Vercel Blob
+    # --- Upload to Vercel Blob ---
     VERCEL_BLOB_WRITE_URL = "https://api.vercel.com/v8/blob/upload"
     BLOB_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN")
-    filename = f"{heading.replace(' ', '_')}.pptx"
-
+    filename = f"{heading.replace(' ', '_')}.pptx" if heading else "presentation.pptx"
     headers = {"Authorization": f"Bearer {BLOB_TOKEN}"}
     files = {"file": (filename, ppt_mem.read())}
     params = {"access": "public"}
-
     response = requests.post(VERCEL_BLOB_WRITE_URL, headers=headers, files=files, data=params)
     if response.ok:
-        url = response.json().get('url')
+        url = response.json().get('url', None)
         return {"url": url}, 200
     else:
         resp_json = response.json() if response.text else {}
         return {"error": "Upload failed", "detail": resp_json}, 500
 
+# ------------- THIS IS THE ONLY ENTRY POINT VERCEL USES -------------
 def handler(request):
     try:
         if request.method == 'POST':
@@ -257,11 +252,9 @@ def handler(request):
                 body = req_json["text"]
             else:
                 body = request.get_data(as_text=True)
-            data, status = main(body)
+            data, status = ppt_api_main(body)
             return (json.dumps(data), status, {'Content-Type': 'application/json'})
         else:
             return (json.dumps({"error": "Method not allowed"}), 405, {'Content-Type': 'application/json'})
     except Exception as e:
         return (json.dumps({"error": str(e)}), 500, {'Content-Type': 'application/json'})
-
-# Vercel expects 'handler' at module global
