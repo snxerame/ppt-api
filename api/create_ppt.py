@@ -8,23 +8,28 @@ from pptx.enum.text import PP_ALIGN, MSO_VERTICAL_ANCHOR
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 
-LOGO_PATH = "sp_global_logo.png"  # Ensure this is in your project root, or leave as is to skip logo
+LOGO_PATH = "sp_global_logo.png"  # Ensure this is present, or code will skip logo
 
 def set_a4_landscape(prs):
     prs.slide_width = Cm(29.7)
     prs.slide_height = Cm(21)
+    print("Set slide to A4 landscape")
 
 def add_footer_with_logo(prs, slide, page_num):
+    print("Adding footer with logo (if possible)")
     logo_width = Cm(6.0)
     logo_height = Cm(2.4)
     footer_y = Cm(18.03)
     try:
         if os.path.exists(LOGO_PATH):
+            print(f"LOGO found at {LOGO_PATH}")
             slide.shapes.add_picture(LOGO_PATH, Cm(1), footer_y, width=logo_width, height=logo_height)
             left_text_x = Cm(7.2)
         else:
+            print(f"LOGO NOT found at {LOGO_PATH}, skipping logo.")
             left_text_x = Cm(1)
-    except Exception:
+    except Exception as e:
+        print(f"Exception when adding logo: {e}")
         left_text_x = Cm(1)
     left_box = slide.shapes.add_textbox(left_text_x, footer_y, Cm(10), Cm(1.5))
     left_frame = left_box.text_frame
@@ -47,6 +52,7 @@ def add_footer_with_logo(prs, slide, page_num):
     p_right.alignment = PP_ALIGN.RIGHT
 
 def add_dates_available_box(slide, left, top, width, height, dates_text):
+    print(f"Adding dates available box: {dates_text}")
     text_box = slide.shapes.add_textbox(left, top, width, height)
     text_box.fill.solid()
     text_box.fill.fore_color.rgb = RGBColor(224, 234, 238)
@@ -69,6 +75,7 @@ def add_dates_available_box(slide, left, top, width, height, dates_text):
     return text_box
 
 def create_front_page(prs, heading, date_to_present):
+    print(f"Creating front page: {heading}, Date: {date_to_present}")
     slide_layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(slide_layout)
     shape = slide.shapes.add_shape(1, 0, 0, prs.slide_width, prs.slide_height)
@@ -112,6 +119,7 @@ def create_front_page(prs, heading, date_to_present):
     p_br.alignment = PP_ALIGN.RIGHT
 
 def create_content_slide(prs, idx, venue_info, page_num):
+    print(f"Creating content slide #{idx + 1}")
     slide_layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(slide_layout)
     venue_name = venue_info.get("venue_name", "")
@@ -199,10 +207,13 @@ def create_content_slide(prs, idx, venue_info, page_num):
     add_footer_with_logo(prs, slide, page_num)
 
 def parse_input(text):
+    print(f"Received input:\n{text}")
     lines = [line.strip() for line in text.split('\n') if line.strip()]
+    print(f"SPLIT lines: {lines}")
     heading = lines[0]
     date_to_present = lines[1]
     num = int(lines[2])
+    print(f"Parsed heading: {heading}, date: {date_to_present}, num: {num}")
     recs = [{} for _ in range(num)]
     for arg in lines[3:]:
         if '=' in arg:
@@ -213,51 +224,75 @@ def parse_input(text):
                     idx = int(prefix[1:]) - 1
                     if 0 <= idx < num:
                         recs[idx][param] = value
+    print(f"Parsed recommendations: {recs}")
     return heading, date_to_present, num, recs
 
 def ppt_api_main(event_body):
-    heading, date_to_present, num, recs = parse_input(event_body)
-    prs = Presentation()
-    set_a4_landscape(prs)
-    create_front_page(prs, heading, date_to_present)
-    slide_num = 2
-    for idx, rec in enumerate(recs):
-        create_content_slide(prs, idx, rec, slide_num)
-        slide_num += 1
-    ppt_mem = io.BytesIO()
-    prs.save(ppt_mem)
-    ppt_mem.seek(0)
-    VERCEL_BLOB_WRITE_URL = "https://api.vercel.com/v8/blob/upload"
-    BLOB_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN")
-    filename = f"{heading.replace(' ', '_')}.pptx" if heading else "presentation.pptx"
-    headers = {"Authorization": f"Bearer {BLOB_TOKEN}"}
-    files = {"file": (filename, ppt_mem.read())}
-    params = {"access": "public"}
-    response = requests.post(VERCEL_BLOB_WRITE_URL, headers=headers, files=files, data=params)
-    if response.ok:
-        url = response.json().get('url', None)
-        return {"url": url}, 200
-    else:
-        try:
-            resp_json = response.json()
-        except Exception:
-            resp_json = {}
-        return {"error": "Upload failed", "detail": resp_json}, 500
+    print("=== ppt_api_main start ===")
+    try:
+        heading, date_to_present, num, recs = parse_input(event_body)
+        prs = Presentation()
+        set_a4_landscape(prs)
+        create_front_page(prs, heading, date_to_present)
+        slide_num = 2
+        for idx, rec in enumerate(recs):
+            create_content_slide(prs, idx, rec, slide_num)
+            slide_num += 1
+        ppt_mem = io.BytesIO()
+        prs.save(ppt_mem)
+        ppt_mem.seek(0)
+        print("PPTX generated in-memory successfully.")
+
+        # Upload to Vercel Blob
+        VERCEL_BLOB_WRITE_URL = "https://api.vercel.com/v8/blob/upload"
+        BLOB_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        print(f"BLOB_TOKEN: {'set' if BLOB_TOKEN else 'NOT SET!'}")
+        filename = f"{heading.replace(' ', '_')}.pptx" if heading else "presentation.pptx"
+        print(f"Uploading as filename: {filename}")
+
+        headers = {"Authorization": f"Bearer {BLOB_TOKEN}"}
+        files = {"file": (filename, ppt_mem.read())}
+        params = {"access": "public"}
+        print("Starting requests.post to Vercel Blob...")
+        response = requests.post(VERCEL_BLOB_WRITE_URL, headers=headers, files=files, data=params)
+        print(f"Blob POST status: {response.status_code}")
+        if response.ok:
+            url = response.json().get('url', None)
+            print(f"File uploaded successfully. URL: {url}")
+            return {"url": url}, 200
+        else:
+            try:
+                resp_json = response.json()
+            except Exception:
+                resp_json = {}
+            print(f"Upload failed! Response: {resp_json}")
+            return {"error": "Upload failed", "detail": resp_json}, 500
+    except Exception as e:
+        print(f"Exception in ppt_api_main: {e}")
+        return {"error": str(e)}, 500
 
 def handler(request):
+    print("--- HANDLER CALLED ---")
     try:
+        print(f"Request method: {request.method}")
         if request.method == 'POST':
             try:
                 req_json = request.get_json(force=True, silent=True)
-            except Exception:
+            except Exception as e:
+                print(f"Error parsing JSON: {e}")
                 req_json = None
             if req_json and 'text' in req_json:
                 body = req_json["text"]
+                print("Input via JSON field")
             else:
                 body = request.get_data(as_text=True)
+                print("Input via raw body")
             data, status = ppt_api_main(body)
+            print(f"Returning status {status}")
             return (json.dumps(data), status, {'Content-Type': 'application/json'})
         else:
+            print("Method not allowed!")
             return (json.dumps({"error": "Method not allowed"}), 405, {'Content-Type': 'application/json'})
     except Exception as e:
+        print(f"EXCEPTION in handler: {e}")
         return (json.dumps({"error": str(e)}), 500, {'Content-Type': 'application/json'})
