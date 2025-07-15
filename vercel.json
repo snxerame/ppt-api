@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "/api/create_ppt",
+      "dest": "/api/create_ppt/index.py"
+    }
+  ],
+  "functions": {
+    "api/create_ppt/index.py": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
+}
